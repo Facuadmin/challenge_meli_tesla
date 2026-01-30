@@ -1,11 +1,15 @@
-# Data Science Challenge
+# 🚀 Data Science Challenge
 **Data & Analytics Team - Mercado Libre**
 
-Este repositorio contiene la solución a los 3 ejercicios del desafío técnico de Data Science.
+[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
+[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange.svg)](https://jupyter.org)
+[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
+
+> 🎯 Este repositorio contiene la solución a los 3 ejercicios del desafío técnico de Data Science para Mercado Libre
 
 ---
 
-## Estructura del Proyecto
+## 📁 Estructura del Proyecto
 
 ```
 challenge/
@@ -15,7 +19,7 @@ challenge/
 │   └── ofertas_relampago.csv           # Dataset de ofertas
 │
 ├── 2_SIMILITUD/                        # Ejercicio 2: Similitud entre productos
-│   ├── Similitud_Entrega_v2.ipynb      # Notebook principal (solución final)
+│   ├── Similitud_Entrega.ipynb         # Notebook principal (solución final)
 │   ├── SBERT_vs_E5_Comparison_v2.ipynb # Comparación de modelos SBERT vs E5
 │   ├── utils_similarity.py             # Módulo con clases de similitud
 │   ├── items_titles.csv                # Dataset de entrenamiento (30K productos)
@@ -34,23 +38,23 @@ challenge/
 
 ---
 
-## Ejercicios
+## 📊 Ejercicios
 
-### 1. Explorar las Ofertas Relámpago - EDA
+### 🔍 1. Explorar las Ofertas Relámpago - EDA
 
 **Objetivo:** Realizar un análisis exploratorio sobre ofertas relámpago de Mercado Libre, generando insights accionables.
 
-**Notebook:** `1_EDA/EDA_Ofertas_Relampago.ipynb`
+**📓 Notebook:** `1_EDA/EDA_Ofertas_Relampago.ipynb`
 
-**Temáticas analizadas:**
-- **Performance y Resultados:** Tasas de éxito, análisis de ofertas "zombie"
-- **Análisis Temporal:** Patrones por hora, día de semana, duración óptima
-- **Categorías y Dominios:** Verticales, dominios problemáticos, análisis Pareto
-- **Pricing, GMV y Velocidad:** Ticket promedio, GMV/hora, top performers
-- **Stock y Operaciones:** Stock óptimo, eficiencia, sobreventas
-- **Estrategia e Impacto:** Free shipping, riesgo operativo, FOMO
+**📈 Temáticas analizadas:**
+- **🎯 Performance y Resultados:** Tasas de éxito, análisis de ofertas "zombie"
+- **⏰ Análisis Temporal:** Patrones por hora, día de semana, duración óptima
+- **📦 Categorías y Dominios:** Verticales, dominios problemáticos, análisis Pareto
+- **💰 Pricing, GMV y Velocidad:** Ticket promedio, GMV/hora, top performers
+- **📊 Stock y Operaciones:** Stock óptimo, eficiencia, sobreventas
+- **🚀 Estrategia e Impacto:** Free shipping, riesgo operativo, FOMO
 
-**Métricas clave definidas:**
+**📋 Métricas clave definidas:**
 | Término | Definición |
 |---------|------------|
 | Conversión | % de ofertas con al menos 1 venta |
@@ -62,15 +66,15 @@ challenge/
 
 ---
 
-### 2. Similitud entre Productos
+### 🤝 2. Similitud entre Productos
 
 **Objetivo:** Generar pares de productos similares basándose en sus títulos, utilizando técnicas de NLP y embeddings.
 
-**Notebooks:**
-- `2_SIMILITUD/Similitud_Entrega_v2.ipynb` - Solución principal
+**📓 Notebooks:**
+- `2_SIMILITUD/Similitud_Entrega.ipynb` - Solución principal
 - `2_SIMILITUD/SBERT_vs_E5_Comparison_v2.ipynb` - Comparación de modelos
 
-**Modelos implementados:**
+**🤖 Modelos implementados:**
 | Modelo | Arquitectura | Dimensión | Características |
 |--------|--------------|-----------|-----------------|
 | SBERT | paraphrase-multilingual-mpnet-base-v2 | 768 | Optimizado para paráfrasis |
@@ -78,14 +82,14 @@ challenge/
 | Word2Vec | Entrenado en corpus | 100 | Skip-gram, promedio de palabras |
 | FastText | Entrenado en corpus | 100 | N-grams de caracteres |
 
-**Output esperado:**
+**📤 Output esperado:**
 ```
 | ITE_ITEM_TITLE | ITE_ITEM_TITLE_2 | Score Similitud (0,1) |
 |----------------|------------------|----------------------|
 | Producto A     | Producto B       | 0.9543               |
 ```
 
-**Funcionalidades del módulo `utils_similarity.py`:**
+**⚙️ Funcionalidades del módulo `utils_similarity.py`:**
 - Preprocesamiento de títulos (normalización, limpieza)
 - Clases para cada modelo: `ProductSimilarity`, `Word2VecSimilarity`, `FastTextSimilarity`
 - Reducción de dimensionalidad (PCA, t-SNE)
@@ -95,35 +99,35 @@ challenge/
 
 ---
 
-### 3. Previsión de Fallas - Mantenimiento Predictivo
+### 🔧 3. Previsión de Fallas - Mantenimiento Predictivo
 
 **Objetivo:** Predecir la probabilidad de falla de dispositivos en galpones Full de Mercado Libre para optimizar costos de mantenimiento.
 
-**Notebook:** `3_PREVISION_FALLOS/Predictive_Maintenance_Devices.ipynb`
+**📓 Notebook:** `3_PREVISION_FALLOS/Predictive_Maintenance_Devices.ipynb`
 
-**Matriz de costos:**
+**💰 Matriz de costos:**
 | Escenario | Costo |
 |-----------|-------|
 | Falla no prevenida (FN) | 1.0 |
 | Mantenimiento preventivo (TP, FP) | 0.5 |
 | Sin costo (TN) | 0.0 |
 
-**Modelos evaluados:**
+**🤖 Modelos evaluados:**
 - Logistic Regression (baseline)
 - Random Forest
 - XGBoost
 - LightGBM
 - CatBoost
 
-**Técnicas de balanceo de clases:**
+**⚖️ Técnicas de balanceo de clases:**
 - SMOTE
 - ADASYN
 - SMOTE-ENN
 - SMOTE-Tomek
 
-**Optimización de hiperparámetros:** Optuna con TPE Sampler
+**🎯 Optimización de hiperparámetros:** Optuna con TPE Sampler
 
-**Métricas de evaluación:**
+**📊 Métricas de evaluación:**
 - ROC-AUC
 - Precision / Recall / F1
 - Cost-based evaluation
@@ -131,9 +135,9 @@ challenge/
 
 ---
 
-## Instalación
+## 🛠️ Instalación
 
-### 1. Crear entorno virtual (recomendado)
+### 1. 🐍 Crear entorno virtual (recomendado)
 
 ```bash
 python -m venv venv
@@ -142,14 +146,14 @@ source venv/bin/activate  # Linux/Mac
 .\venv\Scripts\activate   # Windows
 ```
 
-### 2. Instalar dependencias
+### 2. 📦 Instalar dependencias
 
 ```bash
 cd challenge
 pip install -r requirements.txt
 ```
 
-### 3. Ejecutar notebooks
+### 3. 🚀 Ejecutar notebooks
 
 ```bash
 jupyter notebook
@@ -159,7 +163,7 @@ jupyter lab
 
 ---
 
-## Requisitos del Sistema
+## 💻 Requisitos del Sistema
 
 - **Python:** 3.9+
 - **RAM:** 8GB mínimo (16GB recomendado para modelos de embeddings)
@@ -167,46 +171,8 @@ jupyter lab
 
 ---
 
-## Uso Rápido
 
-### Ejercicio 1 - EDA
-```python
-from utils_eda import OfertasEDA, PerformanceGeneral
-
-eda = OfertasEDA('ofertas_relampago.csv')
-success_rates = PerformanceGeneral.get_success_rates(eda.df)
-PerformanceGeneral.plot_success_rates(eda.df)
-```
-
-### Ejercicio 2 - Similitud
-```python
-from utils_similarity import ProductSimilarity, generar_output_similitud
-
-# Generar output de similitud
-output = generar_output_similitud(df_test, modelo='sbert', top_k=1000)
-output.to_csv('output_similitud.csv', index=False)
-
-# O calcular similitud entre dos productos
-calculator = ProductSimilarity('sbert')
-score = calculator.get_similarity("Nike Air Max", "Zapatillas Nike")
-```
-
-### Ejercicio 3 - Predicción de Fallas
-```python
-import joblib
-from utils_classifier import calculate_cost
-
-# Cargar modelo entrenado
-model = joblib.load('predictive_maintenance_model_optimized.pkl')
-
-# Predecir
-predictions = model.predict(X_test)
-total_cost, breakdown = calculate_cost(y_test, predictions)
-```
-
----
-
-## Aspectos Evaluados
+## 📈 Aspectos Evaluados
 
 | Aspecto | Ejercicio(s) |
 |---------|--------------|
@@ -220,6 +186,17 @@ total_cost, breakdown = calculate_cost(y_test, predictions)
 
 ---
 
-## Autor
+## 👨‍💻 Autor
 
-Challenge completado como parte del proceso de selección para el equipo de Data & Analytics de Mercado Libre.
+**Facundo Maldoando** - Challenge completado como parte del proceso de selección para el equipo de Data & Analytics de Mercado Libre.
+
+---
+
+<div align="center">
+
+**🚀 ¡Gracias por revisar este proyecto! 🚀**
+
+[![GitHub](https://img.shields.io/badge/GitHub-Profile-blue?logo=github)](https://github.com/tu-usuario)
+[![LinkedIn](https://img.shields.io/badge/LinkedIn-Profile-blue?logo=linkedin)](https://linkedin.com/in/tu-perfil)
+
+</div>

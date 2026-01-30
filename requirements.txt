@@ -18,6 +18,12 @@ joblib>=1.3.0
 # NLP & Embeddings
 sentence-transformers>=2.2.0
 gensim>=4.3.0
+datasets>=2.14.0
+
+# PyTorch Ecosystem
+torch>=2.9.0
+torchvision>=0.24.0
+torchaudio>=2.9.0
 
 # Gradient Boosting Models
 xgboost>=2.0.0
