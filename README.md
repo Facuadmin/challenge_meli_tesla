@@ -1,15 +1,11 @@
-# 🚀 Data Science Challenge
+# Data Science Challenge
 **Data & Analytics Team - Mercado Libre**
 
-[![Python](https://img.shields.io/badge/Python-3.9+-blue.svg)](https://python.org)
-[![Jupyter](https://img.shields.io/badge/Jupyter-Notebook-orange.svg)](https://jupyter.org)
-[![License](https://img.shields.io/badge/License-MIT-green.svg)](LICENSE)
-
-> 🎯 Este repositorio contiene la solución a los 3 ejercicios del desafío técnico de Data Science para Mercado Libre
+Este repositorio contiene la solución a los 3 ejercicios del desafío técnico de Data Science.
 
 ---
 
-## 📁 Estructura del Proyecto
+## Estructura del Proyecto
 
 ```
 challenge/
@@ -19,7 +15,7 @@ challenge/
 │   └── ofertas_relampago.csv           # Dataset de ofertas
 │
 ├── 2_SIMILITUD/                        # Ejercicio 2: Similitud entre productos
-│   ├── Similitud_Entrega.ipynb         # Notebook principal (solución final)
+│   ├── Similitud_Entrega_v2.ipynb      # Notebook principal (solución final)
 │   ├── SBERT_vs_E5_Comparison_v2.ipynb # Comparación de modelos SBERT vs E5
 │   ├── utils_similarity.py             # Módulo con clases de similitud
 │   ├── items_titles.csv                # Dataset de entrenamiento (30K productos)
@@ -27,9 +23,10 @@ challenge/
 │   └── output_similitud.csv            # Output con pares similares
 │
 ├── 3_PREVISION_FALLOS/                 # Ejercicio 3: Predicción de fallas
-│   ├── Predictive_Maintenance_Devices.ipynb  # Notebook principal
-│   ├── utils_classifier.py             # Módulo con funciones de clasificación
-│   ├── full_devices.csv                # Dataset de dispositivos
+│   ├── EDA_Predictive_Maintenance.ipynb      # Análisis exploratorio de datos
+│   ├── Modelo_Final.ipynb                    # Notebook principal del modelo
+│   ├── utils_classifier.py                   # Módulo con funciones de clasificación
+│   ├── full_devices.csv                      # Dataset de dispositivos
 │   └── predictive_maintenance_model_optimized.pkl  # Modelo entrenado
 │
 ├── requirements.txt                    # Dependencias del proyecto
@@ -38,23 +35,23 @@ challenge/
 
 ---
 
-## 📊 Ejercicios
+## Ejercicios
 
-### 🔍 1. Explorar las Ofertas Relámpago - EDA
+### 1. Explorar las Ofertas Relámpago - EDA
 
 **Objetivo:** Realizar un análisis exploratorio sobre ofertas relámpago de Mercado Libre, generando insights accionables.
 
-**📓 Notebook:** `1_EDA/EDA_Ofertas_Relampago.ipynb`
+**Notebook:** `1_EDA/EDA_Ofertas_Relampago.ipynb`
 
-**📈 Temáticas analizadas:**
-- **🎯 Performance y Resultados:** Tasas de éxito, análisis de ofertas "zombie"
-- **⏰ Análisis Temporal:** Patrones por hora, día de semana, duración óptima
-- **📦 Categorías y Dominios:** Verticales, dominios problemáticos, análisis Pareto
-- **💰 Pricing, GMV y Velocidad:** Ticket promedio, GMV/hora, top performers
-- **📊 Stock y Operaciones:** Stock óptimo, eficiencia, sobreventas
-- **🚀 Estrategia e Impacto:** Free shipping, riesgo operativo, FOMO
+**Temáticas analizadas:**
+- **Performance y Resultados:** Tasas de éxito, análisis de ofertas "zombie"
+- **Análisis Temporal:** Patrones por hora, día de semana, duración óptima
+- **Categorías y Dominios:** Verticales, dominios problemáticos, análisis Pareto
+- **Pricing, GMV y Velocidad:** Ticket promedio, GMV/hora, top performers
+- **Stock y Operaciones:** Stock óptimo, eficiencia, sobreventas
+- **Estrategia e Impacto:** Free shipping, riesgo operativo, FOMO
 
-**📋 Métricas clave definidas:**
+**Métricas clave definidas:**
 | Término | Definición |
 |---------|------------|
 | Conversión | % de ofertas con al menos 1 venta |
@@ -66,15 +63,15 @@ challenge/
 
 ---
 
-### 🤝 2. Similitud entre Productos
+### 2. Similitud entre Productos
 
 **Objetivo:** Generar pares de productos similares basándose en sus títulos, utilizando técnicas de NLP y embeddings.
 
-**📓 Notebooks:**
-- `2_SIMILITUD/Similitud_Entrega.ipynb` - Solución principal
+**Notebooks:**
+- `2_SIMILITUD/Similitud_Entrega_v2.ipynb` - Solución principal
 - `2_SIMILITUD/SBERT_vs_E5_Comparison_v2.ipynb` - Comparación de modelos
 
-**🤖 Modelos implementados:**
+**Modelos implementados:**
 | Modelo | Arquitectura | Dimensión | Características |
 |--------|--------------|-----------|-----------------|
 | SBERT | paraphrase-multilingual-mpnet-base-v2 | 768 | Optimizado para paráfrasis |
@@ -82,14 +79,14 @@ challenge/
 | Word2Vec | Entrenado en corpus | 100 | Skip-gram, promedio de palabras |
 | FastText | Entrenado en corpus | 100 | N-grams de caracteres |
 
-**📤 Output esperado:**
+**Output esperado:**
 ```
 | ITE_ITEM_TITLE | ITE_ITEM_TITLE_2 | Score Similitud (0,1) |
 |----------------|------------------|----------------------|
 | Producto A     | Producto B       | 0.9543               |
 ```
 
-**⚙️ Funcionalidades del módulo `utils_similarity.py`:**
+**Funcionalidades del módulo `utils_similarity.py`:**
 - Preprocesamiento de títulos (normalización, limpieza)
 - Clases para cada modelo: `ProductSimilarity`, `Word2VecSimilarity`, `FastTextSimilarity`
 - Reducción de dimensionalidad (PCA, t-SNE)
@@ -99,104 +96,56 @@ challenge/
 
 ---
 
-### 🔧 3. Previsión de Fallas - Mantenimiento Predictivo
+### 3. Previsión de Fallas - Mantenimiento Predictivo
 
-**Objetivo:** Predecir la probabilidad de falla de dispositivos en galpones Full de Mercado Libre para optimizar costos de mantenimiento.
+**Objetivo:** Predecir la probabilidad de falla de dispositivos IoT en galpones Full de Mercado Libre para minimizar costos operativos.
 
-**📓 Notebook:** `3_PREVISION_FALLOS/Predictive_Maintenance_Devices.ipynb`
+**Notebooks:**
+- `3_PREVISION_FALLOS/EDA_Predictive_Maintenance.ipynb` - Análisis exploratorio
+- `3_PREVISION_FALLOS/Modelo_Final.ipynb` - Modelo principal
 
-**💰 Matriz de costos:**
-| Escenario | Costo |
+**Matriz de costos:**
+| Escenario | Costo | Descripción |
+|-----------|-------|-------------|
+| Falla no detectada (FN) | 1.0 | El dispositivo falla sin mantenimiento preventivo |
+| Mantenimiento preventivo (TP/FP) | 0.5 | Se realiza mantenimiento (correcto o innecesario) |
+| Sin costo (TN) | 0.0 | No hay falla y no se hace mantenimiento |
+
+**Implicación clave:** Los FN cuestan el doble que los FP → Priorizar Recall sobre Precision
+
+**Modelo Final (V7):**
+| Parámetro | Valor |
 |-----------|-------|
-| Falla no prevenida (FN) | 1.0 |
-| Mantenimiento preventivo (TP, FP) | 0.5 |
-| Sin costo (TN) | 0.0 |
+| Modelo | BalancedBaggingClassifier |
+| n_estimators | 93 |
+| Threshold | 0.85 |
+| Ventana de detección | 30 días |
 
-**🤖 Modelos evaluados:**
-- Logistic Regression (baseline)
-- Random Forest
-- XGBoost
-- LightGBM
-- CatBoost
+**Feature Engineering:**
+- Features temporales (día de semana, mes, semana del año)
+- Rolling statistics (media móvil, máximo) con ventanas de 3, 7 y 14 días
+- Z-scores por dispositivo
+- Atributos clave identificados: `attribute2`, `attribute4`, `attribute7`
 
-**⚖️ Técnicas de balanceo de clases:**
-- SMOTE
-- ADASYN
-- SMOTE-ENN
-- SMOTE-Tomek
+**Técnicas aplicadas:**
+- Split temporal (respeta orden cronológico para evitar data leakage)
+- BalancedBaggingClassifier para manejo de clases desbalanceadas
+- Optimización de hiperparámetros con Optuna (TPE Sampler)
+- Análisis de threshold para optimizar costo operativo
 
-**🎯 Optimización de hiperparámetros:** Optuna con TPE Sampler
+**Resultados:**
+- Recall: 73.9% (detecta 17 de 23 fallas en test)
+- Con threshold óptimo: Ahorro del 95.7% vs baseline
 
-**📊 Métricas de evaluación:**
-- ROC-AUC
-- Precision / Recall / F1
-- Cost-based evaluation
-- Calibration curves
-
----
-
-## 🛠️ Instalación
-
-### 1. 🐍 Crear entorno virtual (recomendado)
-
-```bash
-python -m venv venv
-source venv/bin/activate  # Linux/Mac
-# o
-.\venv\Scripts\activate   # Windows
-```
-
-### 2. 📦 Instalar dependencias
-
-```bash
-cd challenge
-pip install -r requirements.txt
-```
-
-### 3. 🚀 Ejecutar notebooks
-
-```bash
-jupyter notebook
-# o
-jupyter lab
-```
+**Funcionalidades del módulo `utils_classifier.py`:**
+- Carga y preprocesamiento de datos de telemetría
+- Feature engineering temporal y rolling statistics
+- Entrenamiento y evaluación con ventana de detección
+- Visualizaciones: distribución de probabilidades, evolución temporal, matriz de confusión
+- Análisis de threshold y comparación de costos
+- Persistencia del modelo
 
 ---
 
-## 💻 Requisitos del Sistema
-
-- **Python:** 3.9+
-- **RAM:** 8GB mínimo (16GB recomendado para modelos de embeddings)
-- **Espacio en disco:** ~5GB (para modelos pre-entrenados)
-
----
-
-
-## 📈 Aspectos Evaluados
-
-| Aspecto | Ejercicio(s) |
-|---------|--------------|
-| Capacidad analítica y exploración | 1, 2, 3 |
-| Visualización de resultados | 1, 2, 3 |
-| Feature engineering | 2, 3 |
-| Modelado ML | 2, 3 |
-| Análisis de performance | 2, 3 |
-| Buenas prácticas de desarrollo | 1, 2, 3 |
-| ML en producción | 3 |
-
----
-
-## 👨‍💻 Autor
-
-**Facundo Maldoando** - Challenge completado como parte del proceso de selección para el equipo de Data & Analytics de Mercado Libre.
-
----
-
-<div align="center">
-
-**🚀 ¡Gracias por revisar este proyecto! 🚀**
-
-[![GitHub](https://img.shields.io/badge/GitHub-Profile-blue?logo=github)](https://github.com/tu-usuario)
-[![LinkedIn](https://img.shields.io/badge/LinkedIn-Profile-blue?logo=linkedin)](https://linkedin.com/in/tu-perfil)
-
-</div>
+## Autor
+Facundo Maldonado
