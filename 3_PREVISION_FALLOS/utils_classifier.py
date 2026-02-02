@@ -3289,615 +3289,6 @@ RECOMENDACIONES
 
 
 # =============================================================================
-# CONFIGURACIÓN DEL MODELO FINAL
-# =============================================================================
-MODEL_CONFIG = {
-    'model_type': 'BalancedBaggingClassifier',
-    'n_estimators': 93,
-    'threshold': 0.85,
-    'window_days': 30
-}
-
-KEY_ATTRS = ['attribute1', 'attribute2', 'attribute3', 'attribute4', 
-             'attribute5', 'attribute6', 'attribute7', 'attribute8', 'attribute9']
-
-
-# =============================================================================
-# FUNCIONES DE ALTO NIVEL PARA EL MODELO FINAL
-# =============================================================================
-def load_data_final(data_path: str) -> pd.DataFrame:
-    """Carga el dataset de dispositivos."""
-    df = pd.read_csv(data_path)
-    df['date'] = pd.to_datetime(df['date'])
-    df = df.sort_values('date').reset_index(drop=True)
-    return df
-
-
-def temporal_split_final(
-    df: pd.DataFrame, 
-    train_ratio: float = 0.8
-) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp]:
-    """Realiza split temporal de los datos."""
-    train_size = int(len(df) * train_ratio)
-    split_date = df.iloc[train_size]['date']
-    df_train = df.iloc[:train_size].copy()
-    df_test = df.iloc[train_size:].copy()
-    return df_train, df_test, split_date
-
-
-def create_features_final(df: pd.DataFrame) -> pd.DataFrame:
-    """Crea features para el modelo de mantenimiento predictivo."""
-    engineer = FeatureEngineer(window_days=MODEL_CONFIG['window_days'])
-    return engineer.create_all_features(df)
-
-
-def get_feature_columns_final(df: pd.DataFrame) -> List[str]:
-    """Obtiene las columnas de features excluyendo las no predictivas."""
-    exclude = ['date', 'device', 'failure']
-    return [c for c in df.columns if c not in exclude]
-
-
-def train_model_final(
-    X_train: np.ndarray, 
-    y_train: np.ndarray, 
-    random_state: int = 42
-) -> Any:
-    """Entrena el modelo BalancedBaggingClassifier optimizado."""
-    from imblearn.ensemble import BalancedBaggingClassifier
-    from sklearn.tree import DecisionTreeClassifier
-    
-    model = BalancedBaggingClassifier(
-        estimator=DecisionTreeClassifier(max_depth=10, random_state=random_state),
-        n_estimators=MODEL_CONFIG['n_estimators'],
-        random_state=random_state,
-        n_jobs=-1
-    )
-    model.fit(X_train, y_train)
-    return model
-
-
-def predict_final(
-    model: Any, 
-    X: np.ndarray, 
-    threshold: float = None
-) -> Tuple[np.ndarray, np.ndarray]:
-    """Genera predicciones con el threshold configurado."""
-    if threshold is None:
-        threshold = MODEL_CONFIG['threshold']
-    y_proba = model.predict_proba(X)[:, 1]
-    y_pred = (y_proba >= threshold).astype(int)
-    return y_proba, y_pred
-
-
-def evaluate_with_window_final(
-    df_test: pd.DataFrame,
-    y_pred: np.ndarray,
-    window_days: int = 30
-) -> Dict[str, Any]:
-    """Evalúa el modelo considerando ventana de detección."""
-    y_true = df_test['failure'].values
-    
-    tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-    
-    # Calcular costo
-    cost = tp * COST_MAINTENANCE + fp * COST_MAINTENANCE + fn * COST_FAILURE
-    baseline = y_true.sum() * COST_FAILURE
-    savings_pct = (baseline - cost) / baseline * 100 if baseline > 0 else 0
-    
-    metrics = {
-        'tp': int(tp),
-        'fp': int(fp),
-        'fn': int(fn),
-        'tn': int(tn),
-        'precision': precision_score(y_true, y_pred) if (tp + fp) > 0 else 0,
-        'recall': recall_score(y_true, y_pred) if (tp + fn) > 0 else 0,
-        'f1': f1_score(y_true, y_pred),
-        'cost': cost,
-        'baseline': baseline,
-        'savings': baseline - cost,
-        'savings_pct': savings_pct,
-        'window_days': window_days
-    }
-    return metrics
-
-
-def print_results_final(
-    metrics: Dict[str, Any], 
-    config: Dict[str, Any], 
-    window_days: int
-) -> None:
-    """Imprime resultados del modelo."""
-    print_section("RESULTADOS DEL MODELO")
-    print(f"\nConfiguración:")
-    print(f"  - Modelo: {config['model_type']}")
-    print(f"  - Threshold: {config['threshold']}")
-    print(f"  - Ventana: {window_days} días")
-    
-    print(f"\nMétricas de clasificación:")
-    print(f"  - Precision: {metrics['precision']*100:.1f}%")
-    print(f"  - Recall: {metrics['recall']*100:.1f}%")
-    print(f"  - F1-Score: {metrics['f1']*100:.1f}%")
-    
-    print(f"\nMatriz de confusión:")
-    print(f"  - True Positives: {metrics['tp']}")
-    print(f"  - False Positives: {metrics['fp']}")
-    print(f"  - False Negatives: {metrics['fn']}")
-    print(f"  - True Negatives: {metrics['tn']}")
-    
-    print(f"\nAnálisis de costos:")
-    print(f"  - Costo baseline: ${metrics['baseline']:.1f}")
-    print(f"  - Costo con modelo: ${metrics['cost']:.1f}")
-    print(f"  - Ahorro: ${metrics['savings']:.1f} ({metrics['savings_pct']:+.1f}%)")
-
-
-def plot_probability_distribution_final(
-    y_proba: np.ndarray, 
-    y_true: np.ndarray, 
-    threshold: float
-) -> None:
-    """Visualiza distribución de probabilidades predichas."""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    ax.hist(y_proba[y_true == 0], bins=50, alpha=0.7, color=COLORS['success'], 
-            label='No Falla', density=True)
-    ax.hist(y_proba[y_true == 1], bins=50, alpha=0.7, color=COLORS['danger'], 
-            label='Falla', density=True)
-    ax.axvline(x=threshold, color='black', linestyle='--', linewidth=2,
-               label=f'Threshold = {threshold}')
-    
-    ax.set_xlabel('Probabilidad Predicha')
-    ax.set_ylabel('Densidad')
-    ax.set_title('Distribución de Probabilidades por Clase Real')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_predictions_over_time_final(
-    df: pd.DataFrame, 
-    y_proba: np.ndarray, 
-    y_true: np.ndarray, 
-    threshold: float
-) -> None:
-    """Visualiza predicciones a lo largo del tiempo."""
-    df_plot = df.copy()
-    df_plot['y_proba'] = y_proba
-    df_plot['y_true'] = y_true
-    
-    daily = df_plot.groupby('date').agg({
-        'y_proba': 'mean',
-        'y_true': 'sum'
-    }).reset_index()
-    
-    fig, ax1 = plt.subplots(figsize=(14, 6))
-    
-    ax1.plot(daily['date'], daily['y_proba'], color=COLORS['primary'], linewidth=2,
-             label='Prob. Media')
-    ax1.axhline(y=threshold, color='black', linestyle='--', alpha=0.5,
-                label=f'Threshold = {threshold}')
-    ax1.set_xlabel('Fecha')
-    ax1.set_ylabel('Probabilidad Media', color=COLORS['primary'])
-    ax1.tick_params(axis='y', labelcolor=COLORS['primary'])
-    
-    ax2 = ax1.twinx()
-    ax2.bar(daily['date'], daily['y_true'], alpha=0.3, color=COLORS['danger'],
-            label='Fallas Reales')
-    ax2.set_ylabel('Fallas', color=COLORS['danger'])
-    ax2.tick_params(axis='y', labelcolor=COLORS['danger'])
-    
-    fig.legend(loc='upper right', bbox_to_anchor=(0.9, 0.9))
-    ax1.set_title('Predicciones y Fallas a lo Largo del Tiempo')
-    ax1.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_feature_importance_final(
-    model: Any, 
-    feature_cols: List[str], 
-    top_n: int = 20
-) -> None:
-    """Visualiza importancia de features."""
-    if hasattr(model, 'feature_importances_'):
-        importances = model.feature_importances_
-    elif hasattr(model, 'estimators_'):
-        importances = np.mean([
-            est.feature_importances_ for est in model.estimators_ 
-            if hasattr(est, 'feature_importances_')
-        ], axis=0)
-    else:
-        print("El modelo no tiene feature_importances_")
-        return
-    
-    importance_df = pd.DataFrame({
-        'feature': feature_cols,
-        'importance': importances
-    }).sort_values('importance', ascending=True)
-    
-    fig, ax = plt.subplots(figsize=(10, 8))
-    top_features = importance_df.tail(top_n)
-    ax.barh(top_features['feature'], top_features['importance'], color=COLORS['primary'])
-    ax.set_xlabel('Importancia')
-    ax.set_title(f'Top {top_n} Features más Importantes')
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def analyze_thresholds_final(
-    df_test: pd.DataFrame,
-    y_proba: np.ndarray,
-    window_days: int,
-    threshold_step: float = 0.05
-) -> pd.DataFrame:
-    """Analiza métricas para diferentes thresholds."""
-    y_true = df_test['failure'].values
-    baseline = y_true.sum() * COST_FAILURE
-    
-    results = []
-    for thresh in np.arange(0.05, 1.0, threshold_step):
-        y_pred = (y_proba >= thresh).astype(int)
-        tn, fp, fn, tp = confusion_matrix(y_true, y_pred).ravel()
-        
-        cost = tp * COST_MAINTENANCE + fp * COST_MAINTENANCE + fn * COST_FAILURE
-        prec = tp / (tp + fp) if (tp + fp) > 0 else 0
-        rec = tp / (tp + fn) if (tp + fn) > 0 else 0
-        f1 = 2 * prec * rec / (prec + rec) if (prec + rec) > 0 else 0
-        savings_pct = (baseline - cost) / baseline * 100 if baseline > 0 else 0
-        
-        results.append({
-            'threshold': thresh,
-            'tp': tp, 'fp': fp, 'fn': fn, 'tn': tn,
-            'precision': prec, 'recall': rec, 'f1': f1,
-            'cost': cost, 'savings_pct': savings_pct
-        })
-    
-    return pd.DataFrame(results)
-
-
-def display_threshold_table_final(
-    df_thresh: pd.DataFrame, 
-    current_threshold: float
-) -> None:
-    """Muestra tabla formateada de métricas por threshold."""
-    display_threshold_table(df_thresh, current_threshold)
-
-
-def plot_threshold_analysis_final(
-    df_thresh: pd.DataFrame, 
-    metrics: Dict[str, Any], 
-    current_threshold: float
-) -> None:
-    """Visualiza análisis de thresholds."""
-    plot_threshold_analysis_generic(
-        df_thresh, 
-        metrics['baseline'], 
-        current_threshold, 
-        metrics['cost']
-    )
-
-
-def plot_cost_comparison_final(
-    metrics: Dict[str, Any],
-    baseline_cost: float,
-    threshold: float
-) -> None:
-    """Visualiza comparación de costos."""
-    fig, ax = plt.subplots(figsize=(10, 6))
-    
-    labels = ['Sin Modelo\n(Baseline)', 'Con Modelo', 'Ahorro']
-    values = [baseline_cost, metrics['cost'], metrics['savings']]
-    colors = [COLORS['danger'], COLORS['primary'], COLORS['success']]
-    
-    bars = ax.bar(labels, values, color=colors)
-    
-    for bar, val in zip(bars, values):
-        ax.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.5,
-                f'${val:.1f}', ha='center', va='bottom', fontweight='bold')
-    
-    ax.set_ylabel('Costo ($)')
-    ax.set_title(f'Comparación de Costos (Threshold = {threshold})')
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_cost_comparison_multi_threshold_final(
-    df_thresh: pd.DataFrame,
-    baseline: float
-) -> None:
-    """Visualiza comparación de costos para múltiples thresholds."""
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    ax.fill_between(df_thresh['threshold'], baseline, df_thresh['cost'], 
-                    alpha=0.3, color=COLORS['success'], label='Ahorro')
-    ax.plot(df_thresh['threshold'], df_thresh['cost'], 
-            color=COLORS['primary'], linewidth=2, label='Costo con Modelo')
-    ax.axhline(y=baseline, color=COLORS['danger'], linestyle='--', 
-               linewidth=2, label=f'Baseline: ${baseline:.1f}')
-    
-    # Marcar mínimo
-    min_idx = df_thresh['cost'].idxmin()
-    min_thresh = df_thresh.loc[min_idx, 'threshold']
-    min_cost = df_thresh.loc[min_idx, 'cost']
-    ax.scatter([min_thresh], [min_cost], color=COLORS['success'], s=100, zorder=5)
-    ax.annotate(f'Óptimo: {min_thresh:.2f}\n${min_cost:.1f}', 
-                xy=(min_thresh, min_cost), xytext=(min_thresh + 0.1, min_cost + 2),
-                arrowprops=dict(arrowstyle='->', color='black'))
-    
-    ax.set_xlabel('Threshold')
-    ax.set_ylabel('Costo ($)')
-    ax.set_title('Costo vs Threshold')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_cost_comparison_normalized_final(
-    metrics: Dict[str, Any]
-) -> None:
-    """Visualiza comparación de costos normalizada."""
-    fig, ax = plt.subplots(figsize=(8, 6))
-    
-    total = metrics['baseline']
-    values = [
-        metrics['tp'] * COST_MAINTENANCE / total * 100,
-        metrics['fp'] * COST_MAINTENANCE / total * 100,
-        metrics['fn'] * COST_FAILURE / total * 100,
-        metrics['savings'] / total * 100
-    ]
-    labels = ['TP\n(Mant. Preventivo)', 'FP\n(Mant. Innecesario)', 
-              'FN\n(Fallas)', 'Ahorro']
-    colors = [COLORS['success'], COLORS['warning'], COLORS['danger'], COLORS['info']]
-    
-    ax.bar(labels, values, color=colors)
-    
-    for i, (v, l) in enumerate(zip(values, labels)):
-        ax.text(i, v + 1, f'{v:.1f}%', ha='center', va='bottom', fontweight='bold')
-    
-    ax.set_ylabel('Porcentaje del Baseline (%)')
-    ax.set_title('Distribución de Costos (% del Baseline)')
-    ax.grid(True, alpha=0.3, axis='y')
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_confusion_matrix_final(
-    metrics: Dict[str, Any],
-    window_days: int
-) -> None:
-    """Visualiza matriz de confusión con costos."""
-    plot_confusion_matrix_with_costs(metrics, window_days)
-
-
-def plot_failures_detection_final(
-    df_test: pd.DataFrame,
-    y_pred: np.ndarray,
-    y_proba: np.ndarray
-) -> None:
-    """Visualiza detección de fallas."""
-    y_true = df_test['failure'].values
-    
-    # Filtrar solo días con fallas
-    failure_mask = y_true == 1
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    detected = y_pred[failure_mask] == 1
-    not_detected = y_pred[failure_mask] == 0
-    
-    x = np.arange(failure_mask.sum())
-    
-    colors = [COLORS['success'] if d else COLORS['danger'] for d in detected]
-    ax.bar(x, y_proba[failure_mask], color=colors, alpha=0.7)
-    ax.axhline(y=MODEL_CONFIG['threshold'], color='black', linestyle='--',
-               label=f"Threshold = {MODEL_CONFIG['threshold']}")
-    
-    ax.set_xlabel('Falla #')
-    ax.set_ylabel('Probabilidad Predicha')
-    ax.set_title(f'Detección de Fallas: {detected.sum()}/{len(detected)} detectadas ({detected.mean()*100:.1f}%)')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def print_summary_final(
-    config: Dict[str, Any],
-    df_train: pd.DataFrame,
-    df_test: pd.DataFrame,
-    feature_cols: List[str],
-    metrics: Dict[str, Any],
-    window_days: int
-) -> None:
-    """Imprime resumen ejecutivo del modelo."""
-    print_section("RESUMEN EJECUTIVO")
-    
-    print(f"\n  CONFIGURACIÓN DEL MODELO")
-    print(f"  -------------------------")
-    print(f"  Modelo: {config['model_type']}")
-    print(f"  n_estimators: {config['n_estimators']}")
-    print(f"  Threshold: {config['threshold']}")
-    print(f"  Ventana de detección: {window_days} días")
-    
-    print(f"\n  DATOS")
-    print(f"  -----")
-    print(f"  Train: {len(df_train):,} registros ({df_train['failure'].sum()} fallas)")
-    print(f"  Test: {len(df_test):,} registros ({df_test['failure'].sum()} fallas)")
-    print(f"  Features: {len(feature_cols)}")
-    
-    print(f"\n  RESULTADOS EN TEST")
-    print(f"  ------------------")
-    print(f"  Precision: {metrics['precision']*100:.1f}%")
-    print(f"  Recall: {metrics['recall']*100:.1f}%")
-    print(f"  F1-Score: {metrics['f1']*100:.1f}%")
-    
-    print(f"\n  IMPACTO ECONÓMICO")
-    print(f"  -----------------")
-    print(f"  Costo baseline: ${metrics['baseline']:.1f}")
-    print(f"  Costo con modelo: ${metrics['cost']:.1f}")
-    print(f"  AHORRO: ${metrics['savings']:.1f} ({metrics['savings_pct']:+.1f}%)")
-
-
-def plot_final_summary_final(
-    metrics: Dict[str, Any],
-    model_name: str,
-    window_days: int
-) -> None:
-    """Visualiza resumen final del modelo."""
-    fig, axes = plt.subplots(1, 3, figsize=(15, 5))
-    
-    # Métricas de clasificación
-    metric_names = ['Precision', 'Recall', 'F1-Score']
-    metric_values = [metrics['precision'], metrics['recall'], metrics['f1']]
-    colors = [COLORS['primary'], COLORS['success'], COLORS['warning']]
-    
-    axes[0].bar(metric_names, metric_values, color=colors)
-    for i, v in enumerate(metric_values):
-        axes[0].text(i, v + 0.02, f'{v*100:.1f}%', ha='center', fontweight='bold')
-    axes[0].set_ylim([0, 1.1])
-    axes[0].set_title('Métricas de Clasificación')
-    axes[0].grid(True, alpha=0.3, axis='y')
-    
-    # Matriz de confusión simplificada
-    labels = ['TP', 'FP', 'FN']
-    values = [metrics['tp'], metrics['fp'], metrics['fn']]
-    colors = [COLORS['success'], COLORS['warning'], COLORS['danger']]
-    
-    axes[1].bar(labels, values, color=colors)
-    for i, v in enumerate(values):
-        axes[1].text(i, v + 0.5, str(v), ha='center', fontweight='bold')
-    axes[1].set_title('Matriz de Confusión')
-    axes[1].set_ylabel('Cantidad')
-    axes[1].grid(True, alpha=0.3, axis='y')
-    
-    # Análisis de costos
-    cost_labels = ['Baseline', 'Con Modelo', 'Ahorro']
-    cost_values = [metrics['baseline'], metrics['cost'], metrics['savings']]
-    colors = [COLORS['danger'], COLORS['primary'], COLORS['success']]
-    
-    axes[2].bar(cost_labels, cost_values, color=colors)
-    for i, v in enumerate(cost_values):
-        axes[2].text(i, v + 0.5, f'${v:.1f}', ha='center', fontweight='bold')
-    axes[2].set_title('Análisis de Costos')
-    axes[2].set_ylabel('Costo ($)')
-    axes[2].grid(True, alpha=0.3, axis='y')
-    
-    fig.suptitle(f'{model_name} - Ventana {window_days} días', fontsize=14, fontweight='bold')
-    plt.tight_layout()
-    plt.show()
-
-
-def save_model_final(
-    model: Any,
-    feature_cols: List[str],
-    metrics: Dict[str, Any],
-    config: Dict[str, Any],
-    output_path: str
-) -> None:
-    """Guarda el modelo y sus artefactos."""
-    artifacts = {
-        'model': model,
-        'feature_cols': feature_cols,
-        'metrics': metrics,
-        'config': config,
-        'threshold': config['threshold']
-    }
-    joblib.dump(artifacts, output_path)
-    print(f"Modelo guardado en: {output_path}")
-
-
-def plot_device_probability_evolution(
-    df: pd.DataFrame,
-    y_proba: np.ndarray,
-    device_id: str,
-    threshold: float = None
-) -> None:
-    """Visualiza evolución de probabilidad para un dispositivo específico."""
-    if threshold is None:
-        threshold = MODEL_CONFIG['threshold']
-    
-    df_device = df[df['device'] == device_id].copy()
-    df_device['y_proba'] = y_proba[df['device'] == device_id]
-    
-    fig, ax = plt.subplots(figsize=(12, 6))
-    
-    ax.plot(df_device['date'], df_device['y_proba'], marker='o', linewidth=2,
-            color=COLORS['primary'])
-    ax.axhline(y=threshold, color='red', linestyle='--', 
-               label=f'Threshold = {threshold}')
-    
-    # Marcar fallas
-    failures = df_device[df_device['failure'] == 1]
-    if len(failures) > 0:
-        ax.scatter(failures['date'], failures['y_proba'], color=COLORS['danger'],
-                   s=100, zorder=5, label='Fallas')
-    
-    ax.set_xlabel('Fecha')
-    ax.set_ylabel('Probabilidad de Falla')
-    ax.set_title(f'Evolución de Probabilidad - Dispositivo {device_id}')
-    ax.legend()
-    ax.grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-def plot_detection_timeline(
-    df: pd.DataFrame,
-    y_pred: np.ndarray,
-    y_proba: np.ndarray
-) -> None:
-    """Visualiza timeline de detecciones."""
-    df_plot = df.copy()
-    df_plot['y_pred'] = y_pred
-    df_plot['y_proba'] = y_proba
-    
-    # Agrupar por fecha
-    daily = df_plot.groupby('date').agg({
-        'failure': 'sum',
-        'y_pred': 'sum',
-        'y_proba': 'mean'
-    }).reset_index()
-    
-    fig, axes = plt.subplots(2, 1, figsize=(14, 8), sharex=True)
-    
-    # Fallas reales vs predichas
-    width = 0.35
-    x = np.arange(len(daily))
-    axes[0].bar(daily['date'], daily['failure'], width, label='Fallas Reales', 
-                color=COLORS['danger'], alpha=0.7)
-    axes[0].bar(daily['date'], daily['y_pred'], width, label='Predicciones', 
-                color=COLORS['primary'], alpha=0.5)
-    axes[0].set_ylabel('Cantidad')
-    axes[0].set_title('Fallas Reales vs Predicciones por Día')
-    axes[0].legend()
-    axes[0].grid(True, alpha=0.3)
-    
-    # Probabilidad promedio
-    axes[1].plot(daily['date'], daily['y_proba'], color=COLORS['primary'], linewidth=2)
-    axes[1].axhline(y=MODEL_CONFIG['threshold'], color='red', linestyle='--',
-                    label=f"Threshold = {MODEL_CONFIG['threshold']}")
-    axes[1].fill_between(daily['date'], 0, daily['y_proba'], alpha=0.3, color=COLORS['primary'])
-    axes[1].set_xlabel('Fecha')
-    axes[1].set_ylabel('Probabilidad Media')
-    axes[1].set_title('Probabilidad Promedio por Día')
-    axes[1].legend()
-    axes[1].grid(True, alpha=0.3)
-    
-    plt.tight_layout()
-    plt.show()
-
-
-# =============================================================================
 # FUNCIONES ESPECÍFICAS PARA V5 - NOTEBOOK DE PRESENTACIÓN
 # =============================================================================
 
@@ -4295,7 +3686,7 @@ def predict_v5(
     Realiza predicciones con el modelo V5. (Wrapper de predict_with_threshold)
     
     Returns:
-        Tuple con (predicciones binarias, probabilidades)
+        Tuple con (predicciones binarias, probabilidades) - Nota: orden inverso a predict_final
     """
     if threshold is None:
         threshold = V5_OPTIMAL_CONFIG['threshold']
@@ -5162,3 +4553,1246 @@ def plot_alertas_vs_fallas(
     plt.tight_layout()
     plt.show()
 
+
+# =============================================================================
+# MODELO FINAL - FUNCIONES ESPECÍFICAS (Ventana 30 días)
+# =============================================================================
+
+# Configuración Final
+MODEL_CONFIG = {
+    'model_type': 'BalancedBaggingClassifier',
+    'n_estimators': 93,
+    'threshold': 0.85,  # Mejor F1 Score: 19.7%
+    'window_days': 30
+}
+
+KEY_ATTRS = ['attribute2', 'attribute4', 'attribute7']
+
+
+def create_features_final(df: pd.DataFrame, key_attrs: List[str] = None) -> pd.DataFrame:
+    """
+    Crea features para el modelo Final.
+    
+    Args:
+        df: DataFrame con datos de dispositivos
+        key_attrs: Lista de atributos clave (default: KEY_ATTRS)
+    
+    Returns:
+        DataFrame con features creadas
+    """
+    if key_attrs is None:
+        key_attrs = KEY_ATTRS
+    
+    df = df.copy()
+    df = df.sort_values(['device', 'date']).reset_index(drop=True)
+    
+    # Rolling features
+    for attr in key_attrs:
+        for w in [3, 7, 14, 30]:
+            df[f'{attr}_roll_mean_{w}d'] = df.groupby('device')[attr].transform(
+                lambda x: x.shift(1).rolling(w, min_periods=1).mean()
+            )
+            df[f'{attr}_roll_std_{w}d'] = df.groupby('device')[attr].transform(
+                lambda x: x.shift(1).rolling(w, min_periods=1).std()
+            )
+        
+        # Spike ratios
+        for w in [7, 14, 30]:
+            df[f'{attr}_spike_{w}d'] = df[attr] / (df[f'{attr}_roll_mean_{w}d'] + 1)
+        
+        # Diferencias
+        df[f'{attr}_diff'] = df.groupby('device')[attr].diff()
+        df[f'{attr}_accel'] = df.groupby('device')[f'{attr}_diff'].diff()
+        
+        # Z-scores
+        device_mean = df.groupby('device')[attr].transform('mean')
+        device_std = df.groupby('device')[attr].transform('std')
+        df[f'{attr}_zscore'] = (df[attr] - device_mean) / (device_std + 1e-6)
+        
+        daily_mean = df.groupby('date')[attr].transform('mean')
+        daily_std = df.groupby('date')[attr].transform('std')
+        df[f'{attr}_fleet_zscore'] = (df[attr] - daily_mean) / (daily_std + 1e-6)
+    
+    # Combinaciones de spikes
+    spike_cols = [f'{attr}_spike_7d' for attr in key_attrs]
+    df['spike_sum'] = df[spike_cols].sum(axis=1)
+    df['spike_product'] = df[spike_cols].prod(axis=1)
+    df['spike_max'] = df[spike_cols].max(axis=1)
+    
+    # Combinaciones de z-scores
+    zscore_cols = [f'{attr}_zscore' for attr in key_attrs]
+    df['zscore_sum'] = df[zscore_cols].sum(axis=1)
+    df['zscore_max'] = df[zscore_cols].max(axis=1)
+    
+    fleet_zscore_cols = [f'{attr}_fleet_zscore' for attr in key_attrs]
+    df['fleet_zscore_max'] = df[fleet_zscore_cols].max(axis=1)
+    
+    # Reglas como features
+    df['rule_spike_high'] = (
+        (df['attribute7_spike_7d'] >= 5.0) &
+        (df['attribute4_spike_7d'] >= 3.0) &
+        (df['attribute2_spike_7d'] >= 2.0)
+    ).astype(int)
+    df['rule_spike_medium'] = (
+        (df['attribute7_spike_7d'] >= 3.0) &
+        (df['attribute4_spike_7d'] >= 2.0)
+    ).astype(int)
+    df['rule_spike_sum'] = (df['spike_sum'] >= 8.0).astype(int)
+    df['rule_zscore'] = (df['zscore_max'] >= 3.0).astype(int)
+    df['rule_combined'] = (
+        (df['spike_sum'] >= 6.0) & (df['zscore_max'] >= 2.0)
+    ).astype(int)
+    
+    rule_cols = [c for c in df.columns if c.startswith('rule_')]
+    df['rules_count'] = df[rule_cols].sum(axis=1)
+    df['any_rule'] = (df['rules_count'] > 0).astype(int)
+    
+    # Features temporales
+    df['day_of_week'] = df['date'].dt.dayofweek
+    df['day_of_month'] = df['date'].dt.day
+    
+    first_date = df.groupby('device')['date'].transform('min')
+    df['device_age_days'] = (df['date'] - first_date).dt.days
+    
+    return df.fillna(0)
+
+
+def get_feature_columns_final(df: pd.DataFrame) -> List[str]:
+    """Obtiene las columnas de features. (Wrapper de get_feature_columns)"""
+    return get_feature_columns(df)
+
+
+def evaluate_with_window_final(
+    test_df: pd.DataFrame, 
+    predictions: np.ndarray, 
+    window_days: int = 30,
+    cost_failure: float = COST_FAILURE,
+    cost_maintenance: float = COST_MAINTENANCE
+) -> Dict[str, Any]:
+    """
+    Evalúa predicciones con ventana de N días.
+    
+    Una predicción es TP si ocurre en los N días previos a una falla real.
+    
+    Args:
+        test_df: DataFrame de test con columnas 'device', 'date', 'failure'
+        predictions: Array de predicciones (0/1)
+        window_days: Tamaño de la ventana de detección
+        cost_failure: Costo de una falla no detectada
+        cost_maintenance: Costo de mantenimiento preventivo
+    
+    Returns:
+        Dict con métricas de evaluación
+    """
+    df = test_df.copy()
+    df['prediction'] = predictions
+    
+    failures = df[df['failure'] == 1]
+    fallas_detectadas = 0
+    alertas_en_ventana = set()
+    fallas_info = []
+    
+    for _, falla in failures.iterrows():
+        device, falla_date = falla['device'], falla['date']
+        window_start = falla_date - pd.Timedelta(days=window_days)
+        
+        mask = (df['device'] == device) & (df['date'] >= window_start) & \
+               (df['date'] <= falla_date) & (df['prediction'] == 1)
+        
+        pred_ventana = df[mask].index.tolist()
+        detectada = len(pred_ventana) > 0
+        
+        if detectada:
+            fallas_detectadas += 1
+            alertas_en_ventana.update(pred_ventana)
+        
+        fallas_info.append({
+            'device': device,
+            'falla_date': falla_date,
+            'detectada': detectada,
+            'alertas_ventana': len(pred_ventana)
+        })
+    
+    todas_pred = set(df[df['prediction'] == 1].index.tolist())
+    fp = len(todas_pred - alertas_en_ventana)
+    tp, fn = fallas_detectadas, len(failures) - fallas_detectadas
+    
+    precision = tp / (tp + fp) if (tp + fp) > 0 else 0
+    recall = tp / (tp + fn) if (tp + fn) > 0 else 0
+    f1 = 2 * precision * recall / (precision + recall) if (precision + recall) > 0 else 0
+    
+    cost = tp * cost_maintenance + fp * cost_maintenance + fn * cost_failure
+    baseline = len(failures) * cost_failure
+    savings_pct = (baseline - cost) / baseline * 100 if baseline > 0 else 0
+    
+    return {
+        'tp': tp, 'fp': fp, 'fn': fn,
+        'precision': precision, 'recall': recall, 'f1': f1,
+        'cost': cost, 'baseline': baseline, 'savings_pct': savings_pct,
+        'fallas_info': pd.DataFrame(fallas_info)
+    }
+
+
+def load_data_final(data_path: str) -> pd.DataFrame:
+    """Carga y prepara los datos para el modelo Final. (Wrapper de load_data)"""
+    return load_data(data_path, sort_by_date=True)
+
+
+def temporal_split_final(
+    df: pd.DataFrame, 
+    train_ratio: float = 0.8
+) -> Tuple[pd.DataFrame, pd.DataFrame, pd.Timestamp]:
+    """Realiza split temporal de los datos. (Wrapper de temporal_split)"""
+    return temporal_split(df, train_ratio)
+
+
+def train_model_final(
+    X_train: pd.DataFrame, 
+    y_train: pd.Series,
+    n_estimators: int = None,
+    random_state: int = 42
+):
+    """
+    Entrena el modelo Final (BalancedBaggingClassifier).
+    
+    Returns:
+        Modelo entrenado
+    """
+    from imblearn.ensemble import BalancedBaggingClassifier
+    
+    if n_estimators is None:
+        n_estimators = MODEL_CONFIG['n_estimators']
+    
+    model = BalancedBaggingClassifier(
+        n_estimators=n_estimators,
+        random_state=random_state,
+        n_jobs=-1
+    )
+    
+    model.fit(X_train, y_train)
+    return model
+
+
+def predict_final(
+    model, 
+    X: pd.DataFrame, 
+    threshold: float = None
+) -> Tuple[np.ndarray, np.ndarray]:
+    """Genera predicciones con el modelo Final. (Wrapper de predict_with_threshold)"""
+    if threshold is None:
+        threshold = MODEL_CONFIG['threshold']
+    return predict_with_threshold(model, X, threshold)
+
+
+def analyze_thresholds_final(
+    test_df: pd.DataFrame,
+    y_proba: np.ndarray,
+    window_days: int = 30,
+    threshold_step: float = 0.05
+) -> pd.DataFrame:
+    """
+    Analiza métricas para diferentes thresholds.
+    
+    Args:
+        test_df: DataFrame de test
+        y_proba: Probabilidades predichas
+        window_days: Ventana de evaluación
+        threshold_step: Paso entre thresholds
+    
+    Returns:
+        DataFrame con métricas por threshold
+    """
+    thresholds = np.arange(threshold_step, 1.0, threshold_step)
+    results = []
+    
+    for thresh in thresholds:
+        y_pred_t = (y_proba >= thresh).astype(int)
+        m = evaluate_with_window_final(test_df, y_pred_t, window_days)
+        
+        total_predictions = len(y_pred_t)
+        tn = total_predictions - m['tp'] - m['fp'] - m['fn']
+        
+        results.append({
+            'threshold': thresh,
+            'tp': m['tp'],
+            'fp': m['fp'],
+            'fn': m['fn'],
+            'tn': tn,
+            'precision': m['precision'],
+            'recall': m['recall'],
+            'f1': m['f1'],
+            'cost': m['cost'],
+            'savings_pct': m['savings_pct']
+        })
+    
+    return pd.DataFrame(results)
+
+
+def display_threshold_table_final(df_thresh: pd.DataFrame, current_threshold: float = None) -> None:
+    """Muestra tabla formateada de métricas por threshold. (Wrapper de display_threshold_table)"""
+    display_threshold_table(df_thresh, current_threshold)
+
+
+def plot_probability_distribution_final(
+    y_proba: np.ndarray, 
+    y_true: np.ndarray, 
+    threshold: float = None
+) -> None:
+    """Visualiza distribución de probabilidades por clase."""
+    if threshold is None:
+        threshold = MODEL_CONFIG['threshold']
+    
+    fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+    
+    # Histograma
+    ax1 = axes[0]
+    ax1.hist(y_proba[y_true == 0], bins=50, alpha=0.7, label='No Falla', 
+             color=COLORS['success'], density=True)
+    ax1.hist(y_proba[y_true == 1], bins=50, alpha=0.7, label='Falla', 
+             color=COLORS['danger'], density=True)
+    ax1.axvline(x=threshold, color=COLORS['dark'], linestyle='--', linewidth=2, 
+                label=f'Threshold = {threshold}')
+    ax1.set_xlabel('Probabilidad de Falla')
+    ax1.set_ylabel('Densidad')
+    ax1.set_title('Distribución de Probabilidades por Clase')
+    ax1.legend()
+    
+    # Box plot
+    ax2 = axes[1]
+    data_box = [y_proba[y_true == 0], y_proba[y_true == 1]]
+    bp = ax2.boxplot(data_box, labels=['No Falla', 'Falla'], patch_artist=True)
+    bp['boxes'][0].set_facecolor(COLORS['success'])
+    bp['boxes'][1].set_facecolor(COLORS['danger'])
+    ax2.axhline(y=threshold, color=COLORS['dark'], linestyle='--', linewidth=2,
+                label=f'Threshold = {threshold}')
+    ax2.set_ylabel('Probabilidad de Falla')
+    ax2.set_title('Distribución de Probabilidades (Box Plot)')
+    ax2.legend()
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_predictions_over_time_final(
+    df: pd.DataFrame, 
+    y_proba: np.ndarray, 
+    y_true: np.ndarray, 
+    threshold: float = None
+) -> None:
+    """
+    Vista simplificada tipo semáforo: cada día un color según resultado.
+    
+    Colores:
+    - Verde: Falla detectada correctamente (TP)
+    - Rojo: Falla NO detectada (FN) 
+    - Amarillo: Falsa alarma (FP)
+    - Gris: Día normal sin eventos (TN)
+    """
+    from matplotlib.patches import Patch
+    
+    if threshold is None:
+        threshold = MODEL_CONFIG['threshold']
+    
+    df_plot = df.copy()
+    df_plot['y_proba'] = y_proba
+    df_plot['y_true'] = y_true
+    df_plot['y_pred'] = (y_proba >= threshold).astype(int)
+    
+    # Clasificar cada observación
+    df_plot['tp'] = ((df_plot['y_true'] == 1) & (df_plot['y_pred'] == 1)).astype(int)
+    df_plot['fn'] = ((df_plot['y_true'] == 1) & (df_plot['y_pred'] == 0)).astype(int)
+    df_plot['fp'] = ((df_plot['y_true'] == 0) & (df_plot['y_pred'] == 1)).astype(int)
+    
+    # Resumen diario
+    daily = df_plot.groupby('date').agg({
+        'y_true': 'sum',
+        'y_pred': 'sum',
+        'tp': 'sum',
+        'fn': 'sum',
+        'fp': 'sum'
+    })
+    
+    # Colorear cada día según prioridad: FN > TP > FP > TN
+    colors = []
+    for _, row in daily.iterrows():
+        if row['fn'] > 0:
+            colors.append('#e74c3c')  # Rojo - falla no detectada (crítico)
+        elif row['tp'] > 0:
+            colors.append('#27ae60')  # Verde - falla detectada
+        elif row['fp'] > 0:
+            colors.append('#f39c12')  # Amarillo - falsa alarma
+        else:
+            colors.append('#ecf0f1')  # Gris - día normal
+    
+    # Calcular métricas
+    total_fallas = df_plot['y_true'].sum()
+    fallas_detectadas = df_plot['tp'].sum()
+    fallas_perdidas = df_plot['fn'].sum()
+    falsas_alarmas = df_plot['fp'].sum()
+    recall = fallas_detectadas / total_fallas * 100 if total_fallas > 0 else 0
+    
+    # Crear figura
+    fig, ax = plt.subplots(figsize=(14, 4))
+    
+    # Barras de colores por día
+    ax.bar(daily.index, [1]*len(daily), color=colors, width=1, edgecolor='white', linewidth=0.5)
+    
+    # Leyenda
+    legend_elements = [
+        Patch(facecolor='#27ae60', edgecolor='white', label=f'Falla Detectada ({fallas_detectadas})'),
+        Patch(facecolor='#e74c3c', edgecolor='white', label=f'Falla NO Detectada ({fallas_perdidas})'),
+        Patch(facecolor='#f39c12', edgecolor='white', label=f'Falsa Alarma ({falsas_alarmas})'),
+        Patch(facecolor='#ecf0f1', edgecolor='gray', label='Día Normal')
+    ]
+    ax.legend(handles=legend_elements, loc='upper right', ncol=4, fontsize=9)
+    
+    # Formato
+    ax.set_yticks([])
+    ax.set_xlabel('Fecha')
+    ax.set_title(f'Resumen de Predicciones por Día | Recall: {recall:.1f}% ({fallas_detectadas}/{total_fallas} fallas) | Threshold: {threshold}', 
+                 fontsize=12, fontweight='bold')
+    
+    # Rotar fechas si hay muchas
+    plt.xticks(rotation=45, ha='right')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cost_comparison_final(
+    df: pd.DataFrame, 
+    y_pred: np.ndarray, 
+    y_true: np.ndarray,
+    model_name: str = 'Final'
+) -> None:
+    """Visualiza comparación de costos modelo vs baseline."""
+    df_cost = df.copy()
+    df_cost['y_pred'] = y_pred
+    df_cost['y_true'] = y_true
+    
+    df_cost['cost_baseline'] = df_cost['y_true'] * COST_FAILURE
+    df_cost['cost_model'] = df_cost['y_pred'] * COST_MAINTENANCE
+    
+    daily_baseline = df_cost.groupby('date')['cost_baseline'].sum().cumsum()
+    daily_model_pred = df_cost.groupby('date')['cost_model'].sum().cumsum()
+    
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    
+    # Panel 1: Costo acumulado
+    ax1 = axes[0]
+    ax1.plot(daily_baseline.index, daily_baseline.values, 
+             color=COLORS['danger'], linewidth=2, label='Baseline (sin modelo)')
+    ax1.plot(daily_model_pred.index, daily_model_pred.values, 
+             color=COLORS['success'], linewidth=2, label=f'Costo Mantenimientos ({model_name})')
+    ax1.fill_between(daily_baseline.index, daily_baseline.values, daily_model_pred.values,
+                     alpha=0.3, color=COLORS['success'])
+    ax1.set_ylabel('Costo Acumulado ($)')
+    ax1.set_title(f'Costo Acumulado: Baseline vs {model_name}')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Panel 2: Diferencia
+    ax2 = axes[1]
+    diff = daily_baseline - daily_model_pred
+    colors_bar = [COLORS['success'] if d > 0 else COLORS['danger'] for d in diff.values]
+    ax2.bar(diff.index, diff.values, color=colors_bar, alpha=0.7, width=1)
+    ax2.axhline(y=0, color='black', linewidth=1)
+    ax2.set_ylabel('Diferencia de Costo ($)')
+    ax2.set_xlabel('Fecha')
+    ax2.set_title('Diferencia: Baseline - Modelo (verde = ahorro)')
+    ax2.grid(True, alpha=0.3)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_cost_comparison_multi_threshold_final(
+    df: pd.DataFrame, 
+    y_proba: np.ndarray, 
+    y_true: np.ndarray,
+    thresholds: List[float] = [0.85, 0.90],
+    model_name: str = 'Final'
+) -> None:
+    """
+    Visualiza comparación de costos entre baseline y múltiples thresholds.
+    
+    Args:
+        df: DataFrame con columna 'date'
+        y_proba: Probabilidades predichas
+        y_true: Valores reales
+        thresholds: Lista de thresholds a comparar
+        model_name: Nombre del modelo
+    """
+    df_cost = df.copy()
+    df_cost['y_true'] = y_true
+    
+    # Calcular costo baseline
+    df_cost['cost_baseline'] = df_cost['y_true'] * COST_FAILURE
+    daily_baseline = df_cost.groupby('date')['cost_baseline'].sum().cumsum()
+    
+    # Calcular costos para cada threshold
+    daily_models = {}
+    total_costs = {}
+    for th in thresholds:
+        y_pred_th = (y_proba >= th).astype(int)
+        df_cost[f'cost_model_{th}'] = y_pred_th * COST_MAINTENANCE
+        daily_models[th] = df_cost.groupby('date')[f'cost_model_{th}'].sum().cumsum()
+        total_costs[th] = df_cost[f'cost_model_{th}'].sum()
+    
+    # Colores para los diferentes thresholds
+    colors_th = ['#27ae60', '#3498db', '#9b59b6', '#f39c12', '#1abc9c']
+    
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    
+    # Panel 1: Costo acumulado
+    ax1 = axes[0]
+    ax1.plot(daily_baseline.index, daily_baseline.values, 
+             color=COLORS['danger'], linewidth=2.5, label='Baseline (sin modelo)', linestyle='--')
+    
+    for i, th in enumerate(thresholds):
+        color = colors_th[i % len(colors_th)]
+        ax1.plot(daily_models[th].index, daily_models[th].values, 
+                 color=color, linewidth=2, label=f'{model_name} (threshold={th})')
+    
+    ax1.set_ylabel('Costo Acumulado ($)')
+    ax1.set_title(f'Costo Acumulado: Baseline vs {model_name} con Diferentes Thresholds')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Panel 2: Barras comparativas
+    ax2 = axes[1]
+    total_baseline = df_cost['cost_baseline'].sum()
+    
+    labels = ['Baseline\n(sin modelo)'] + [f'{model_name}\n(th={th})' for th in thresholds]
+    values = [total_baseline] + [total_costs[th] for th in thresholds]
+    bar_colors = [COLORS['danger']] + [colors_th[i % len(colors_th)] for i in range(len(thresholds))]
+    
+    bars = ax2.bar(labels, values, color=bar_colors)
+    ax2.set_ylabel('Costo Total ($)')
+    ax2.set_title('Comparación de Costo Total por Threshold')
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    # Añadir valores en las barras
+    for bar, val in zip(bars, values):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + total_baseline*0.01, 
+                 f'${val:.0f}', ha='center', va='bottom', fontsize=10, fontweight='bold')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Resumen
+    print(f"\n{'='*60}")
+    print("COMPARACIÓN DE COSTOS POR THRESHOLD")
+    print(f"{'='*60}")
+    print(f"  Costo Baseline (sin modelo): ${total_baseline:.2f}")
+    for th in thresholds:
+        ahorro = total_baseline - total_costs[th]
+        ahorro_pct = (ahorro / total_baseline) * 100 if total_baseline > 0 else 0
+        print(f"  Costo con threshold={th}: ${total_costs[th]:.2f} (Ahorro: ${ahorro:.2f}, {ahorro_pct:.1f}%)")
+    print(f"{'='*60}")
+
+
+def plot_cost_comparison_normalized_final(
+    df: pd.DataFrame, 
+    y_pred: np.ndarray, 
+    y_true: np.ndarray,
+    cost_failure: float = 1.0,
+    cost_maintenance: float = 0.1,
+    model_name: str = 'Final',
+    threshold: float = None
+) -> None:
+    """
+    Visualiza comparación de costos modelo vs baseline con costos personalizables.
+    
+    Args:
+        df: DataFrame con columna 'date'
+        y_pred: Predicciones binarias
+        y_true: Valores reales
+        cost_failure: Costo por fallo no atendido (default: 1.0)
+        cost_maintenance: Costo por mantenimiento preventivo (default: 0.1)
+        model_name: Nombre del modelo para el título
+        threshold: Threshold usado (opcional, para mostrar en título)
+    """
+    df_cost = df.copy()
+    df_cost['y_pred'] = y_pred
+    df_cost['y_true'] = y_true
+    
+    # Calcular costos
+    df_cost['cost_baseline'] = df_cost['y_true'] * cost_failure
+    df_cost['cost_model'] = df_cost['y_pred'] * cost_maintenance
+    
+    # Agregar costo de fallos no detectados (FN)
+    df_cost['cost_fn'] = ((df_cost['y_true'] == 1) & (df_cost['y_pred'] == 0)).astype(int) * cost_failure
+    df_cost['cost_model_total'] = df_cost['cost_model'] + df_cost['cost_fn']
+    
+    # Acumulados diarios
+    daily_baseline = df_cost.groupby('date')['cost_baseline'].sum().cumsum()
+    daily_model = df_cost.groupby('date')['cost_model_total'].sum().cumsum()
+    
+    # Visualización
+    fig, axes = plt.subplots(2, 1, figsize=(14, 8))
+    
+    # Panel 1: Costo acumulado
+    ax1 = axes[0]
+    ax1.plot(daily_baseline.index, daily_baseline.values, 
+             color=COLORS['danger'], linewidth=2, 
+             label=f'Baseline (sin modelo) - Costo={cost_failure} por fallo')
+    
+    th_str = f' (threshold={threshold})' if threshold else ''
+    ax1.plot(daily_model.index, daily_model.values, 
+             color=COLORS['success'], linewidth=2, 
+             label=f'{model_name}{th_str} - Mant={cost_maintenance}')
+    
+    ax1.fill_between(daily_baseline.index, daily_baseline.values, daily_model.values,
+                     alpha=0.3, color=COLORS['success'], 
+                     where=daily_baseline.values >= daily_model.values)
+    ax1.fill_between(daily_baseline.index, daily_baseline.values, daily_model.values,
+                     alpha=0.3, color=COLORS['danger'], 
+                     where=daily_baseline.values < daily_model.values)
+    
+    ax1.set_ylabel('Costo Acumulado (unidades)')
+    ax1.set_title(f'Comparación de Costos Normalizado: Baseline vs {model_name}\n'
+                  f'(Costo Fallo={cost_failure}, Costo Mantenimiento={cost_maintenance})')
+    ax1.legend()
+    ax1.grid(True, alpha=0.3)
+    
+    # Panel 2: Resumen en barras
+    ax2 = axes[1]
+    total_baseline = df_cost['cost_baseline'].sum()
+    total_model = df_cost['cost_model_total'].sum()
+    ahorro = total_baseline - total_model
+    ahorro_pct = (ahorro / total_baseline) * 100 if total_baseline > 0 else 0
+    
+    bars = ax2.bar(
+        ['Baseline\n(sin modelo)', f'{model_name}\n(th={threshold})' if threshold else model_name], 
+        [total_baseline, total_model], 
+        color=[COLORS['danger'], COLORS['success']]
+    )
+    ax2.set_ylabel('Costo Total (unidades)')
+    ax2.set_title(f'Costo Total: Ahorro = {ahorro:.2f} unidades ({ahorro_pct:.1f}%)')
+    ax2.grid(True, alpha=0.3, axis='y')
+    
+    # Añadir valores en las barras
+    for bar, val in zip(bars, [total_baseline, total_model]):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.1, 
+                 f'{val:.2f}', ha='center', va='bottom', fontsize=12, fontweight='bold')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Resumen detallado
+    print(f"\n{'='*50}")
+    print("RESUMEN DE COSTOS NORMALIZADO")
+    print(f"{'='*50}")
+    print(f"  Costo por fallo no atendido: {cost_failure}")
+    print(f"  Costo por mantenimiento preventivo: {cost_maintenance}")
+    print(f"{'='*50}")
+    print(f"  Total fallos reales: {int(df_cost['y_true'].sum())}")
+    print(f"  Total mantenimientos predichos: {int(df_cost['y_pred'].sum())}")
+    print(f"  Fallos detectados (TP): {((df_cost['y_true'] == 1) & (df_cost['y_pred'] == 1)).sum()}")
+    print(f"  Fallos no detectados (FN): {((df_cost['y_true'] == 1) & (df_cost['y_pred'] == 0)).sum()}")
+    print(f"{'='*50}")
+    print(f"  Costo Baseline (sin modelo): {total_baseline:.2f}")
+    print(f"  Costo con Modelo: {total_model:.2f}")
+    print(f"  AHORRO: {ahorro:.2f} ({ahorro_pct:.1f}%)")
+    print(f"{'='*50}")
+
+
+def plot_confusion_matrix_final(metrics: Dict[str, Any], window_days: int = 30) -> None:
+    """Visualiza matriz de confusión con costos. (Wrapper de plot_confusion_matrix_with_costs)"""
+    plot_confusion_matrix_with_costs(metrics, window_days)
+
+
+def plot_feature_importance_final(
+    model, 
+    feature_cols: List[str], 
+    top_n: int = 20,
+    X_val: pd.DataFrame = None,
+    y_val: np.ndarray = None,
+    use_permutation: bool = False
+) -> None:
+    """
+    Visualiza importancia de features.
+    
+    Args:
+        model: Modelo entrenado
+        feature_cols: Nombres de features
+        top_n: Número de features a mostrar
+        X_val: Datos de validación (opcional, para permutation importance)
+        y_val: Labels de validación (opcional, para permutation importance)
+        use_permutation: Si True, usa permutation importance (más preciso pero lento)
+    """
+    if use_permutation and X_val is not None and y_val is not None:
+        plot_permutation_importance(model, X_val, y_val, feature_cols, top_n)
+    else:
+        plot_feature_importance_generic(model, feature_cols, top_n, highlight_pattern='rule')
+
+
+def plot_permutation_importance(
+    model,
+    X_val: pd.DataFrame,
+    y_val: np.ndarray,
+    feature_cols: List[str],
+    top_n: int = 20
+) -> None:
+    """
+    Visualiza importancia de features usando permutation importance.
+    Más preciso para modelos ensemble como BalancedBaggingClassifier.
+    
+    Args:
+        model: Modelo entrenado
+        X_val: Datos de validación
+        y_val: Labels de validación
+        feature_cols: Nombres de features
+        top_n: Número de features a mostrar
+    """
+    from sklearn.inspection import permutation_importance
+    
+    print("Calculando permutation importance (esto puede tardar unos segundos)...")
+    
+    result = permutation_importance(
+        model, X_val, y_val, 
+        n_repeats=10, 
+        random_state=42, 
+        n_jobs=-1
+    )
+    
+    importance_df = pd.DataFrame({
+        'feature': feature_cols,
+        'importance': result.importances_mean,
+        'std': result.importances_std
+    }).sort_values('importance', ascending=True)
+    
+    fig, ax = plt.subplots(figsize=(10, 8))
+    
+    top_features = importance_df.tail(top_n)
+    colors_imp = [COLORS['primary'] if 'rule' not in f else COLORS['warning'] 
+                  for f in top_features['feature']]
+    
+    ax.barh(top_features['feature'], top_features['importance'], 
+            xerr=top_features['std'], color=colors_imp, capsize=3)
+    ax.set_xlabel('Importancia (reducción en accuracy)')
+    ax.set_title(f'Top {top_n} Features más Importantes (Permutation Importance)')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_threshold_analysis_final(
+    df_thresh: pd.DataFrame, 
+    metrics: Dict[str, Any],
+    current_threshold: float = None
+) -> None:
+    """Visualiza análisis de thresholds. (Wrapper de plot_threshold_analysis_generic)"""
+    if current_threshold is None:
+        current_threshold = MODEL_CONFIG['threshold']
+    plot_threshold_analysis_generic(df_thresh, metrics['baseline'], current_threshold, metrics['cost'])
+
+
+def plot_failures_detection_final(fallas_df: pd.DataFrame) -> None:
+    """Visualiza fallas detectadas vs no detectadas."""
+    fig, ax = plt.subplots(figsize=(10, 6))
+    
+    detectadas = fallas_df[fallas_df['detectada']]
+    no_detectadas = fallas_df[~fallas_df['detectada']]
+    
+    ax.scatter(detectadas['falla_date'], [1]*len(detectadas), 
+               color=COLORS['success'], s=200, marker='o', 
+               label=f'Detectadas ({len(detectadas)})')
+    ax.scatter(no_detectadas['falla_date'], [0]*len(no_detectadas), 
+               color=COLORS['danger'], s=200, marker='X', 
+               label=f'No detectadas ({len(no_detectadas)})')
+    
+    ax.set_yticks([0, 1])
+    ax.set_yticklabels(['No Detectada', 'Detectada'])
+    ax.set_xlabel('Fecha de Falla')
+    ax.set_title(f'Fallas en Período de Test: {len(detectadas)} detectadas de {len(fallas_df)} totales')
+    ax.legend()
+    ax.grid(True, alpha=0.3)
+
+
+def plot_device_probability_evolution(
+    df: pd.DataFrame,
+    y_proba: np.ndarray,
+    fallas_info: pd.DataFrame,
+    threshold: float = None,
+    window_days: int = 30,
+    n_examples: int = 4,
+    only_detected: bool = True
+) -> None:
+    """
+    Visualiza la evolución de probabilidades de falla para dispositivos específicos.
+    
+    Muestra cómo el modelo detecta el aumento de probabilidad antes de la falla
+    y cuándo se cruza el threshold para decidir mantenimiento.
+    
+    Args:
+        df: DataFrame con datos de test (debe tener 'device', 'date')
+        y_proba: Probabilidades predichas
+        fallas_info: DataFrame con info de fallas (de evaluate_with_window_final)
+        threshold: Umbral de decisión
+        window_days: Ventana de detección
+        n_examples: Número de ejemplos a mostrar
+        only_detected: Si True, solo muestra fallas detectadas correctamente
+    """
+    if threshold is None:
+        threshold = MODEL_CONFIG['threshold']
+    
+    # Preparar datos
+    df_plot = df.copy()
+    df_plot['y_proba'] = y_proba
+    
+    # Filtrar fallas según criterio
+    if only_detected:
+        fallas_mostrar = fallas_info[fallas_info['detectada'] == True].head(n_examples)
+        titulo_tipo = "DETECTADAS CORRECTAMENTE"
+    else:
+        fallas_mostrar = fallas_info[fallas_info['detectada'] == False].head(n_examples)
+        titulo_tipo = "NO DETECTADAS"
+    
+    if len(fallas_mostrar) == 0:
+        print(f"No hay fallas {'detectadas' if only_detected else 'no detectadas'} para mostrar.")
+        return
+    
+    # Crear subplots
+    n_plots = min(len(fallas_mostrar), n_examples)
+    fig, axes = plt.subplots(n_plots, 1, figsize=(14, 4 * n_plots))
+    if n_plots == 1:
+        axes = [axes]
+    
+    fig.suptitle(f'EVOLUCIÓN DE PROBABILIDAD DE FALLA - CASOS {titulo_tipo}', 
+                 fontsize=14, fontweight='bold', y=1.02)
+    
+    for idx, (_, falla) in enumerate(fallas_mostrar.iterrows()):
+        ax = axes[idx]
+        device = falla['device']
+        falla_date = falla['falla_date']
+        
+        # Filtrar datos del dispositivo
+        device_data = df_plot[df_plot['device'] == device].sort_values('date')
+        
+        if len(device_data) == 0:
+            continue
+        
+        # Calcular ventana
+        window_start = falla_date - pd.Timedelta(days=window_days)
+        
+        # Plot de probabilidad
+        ax.plot(device_data['date'], device_data['y_proba'], 
+                color=COLORS['primary'], linewidth=2, label='Probabilidad de falla')
+        
+        # Línea de threshold
+        ax.axhline(y=threshold, color=COLORS['dark'], linestyle='--', linewidth=2,
+                   label=f'Threshold = {threshold}')
+        
+        # Marcar la falla real
+        ax.axvline(x=falla_date, color=COLORS['danger'], linewidth=3, 
+                   label='Falla real', alpha=0.8)
+        
+        # Sombrear ventana de detección
+        ax.axvspan(window_start, falla_date, alpha=0.2, color=COLORS['warning'],
+                   label=f'Ventana {window_days}d')
+        
+        # Marcar puntos donde se cruza el threshold (decisión de mantenimiento)
+        alertas = device_data[device_data['y_proba'] >= threshold]
+        alertas_en_ventana = alertas[(alertas['date'] >= window_start) & (alertas['date'] <= falla_date)]
+        
+        if len(alertas_en_ventana) > 0:
+            primera_alerta = alertas_en_ventana.iloc[0]
+            ax.scatter([primera_alerta['date']], [primera_alerta['y_proba']], 
+                      color=COLORS['success'], s=200, marker='*', zorder=5,
+                      label='Primera alerta en ventana')
+            
+            # Calcular días de anticipación
+            dias_anticipacion = (falla_date - primera_alerta['date']).days
+            ax.annotate(f'Alerta {dias_anticipacion}d antes', 
+                       xy=(primera_alerta['date'], primera_alerta['y_proba']),
+                       xytext=(10, 20), textcoords='offset points',
+                       fontsize=10, fontweight='bold',
+                       arrowprops=dict(arrowstyle='->', color=COLORS['success']),
+                       color=COLORS['success'])
+        
+        # Configurar ejes
+        ax.set_xlim(device_data['date'].min(), device_data['date'].max())
+        ax.set_ylim(0, 1.05)
+        ax.set_ylabel('Probabilidad')
+        ax.set_title(f'Dispositivo: {device} | Falla: {falla_date.strftime("%Y-%m-%d")}', 
+                    fontsize=12, fontweight='bold')
+        ax.legend(loc='upper left', fontsize=9)
+        ax.grid(True, alpha=0.3)
+        
+        # Añadir zona de "decisión de mantenimiento"
+        ax.fill_between(device_data['date'], threshold, 1, 
+                       where=(device_data['y_proba'] >= threshold),
+                       alpha=0.3, color=COLORS['success'], 
+                       label='Zona de mantenimiento')
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def plot_detection_timeline(
+    df: pd.DataFrame,
+    y_proba: np.ndarray,
+    fallas_info: pd.DataFrame,
+    threshold: float = None,
+    window_days: int = 30
+) -> None:
+    """
+    Muestra un timeline resumido de todas las detecciones exitosas.
+    
+    Args:
+        df: DataFrame con datos de test
+        y_proba: Probabilidades predichas
+        fallas_info: DataFrame con info de fallas
+        threshold: Umbral de decisión
+        window_days: Ventana de detección
+    """
+    if threshold is None:
+        threshold = MODEL_CONFIG['threshold']
+    
+    df_plot = df.copy()
+    df_plot['y_proba'] = y_proba
+    
+    # Solo fallas detectadas
+    detectadas = fallas_info[fallas_info['detectada'] == True]
+    
+    if len(detectadas) == 0:
+        print("No hay fallas detectadas para mostrar.")
+        return
+    
+    fig, ax = plt.subplots(figsize=(14, 6))
+    
+    anticipaciones = []
+    
+    for i, (_, falla) in enumerate(detectadas.iterrows()):
+        device = falla['device']
+        falla_date = falla['falla_date']
+        window_start = falla_date - pd.Timedelta(days=window_days)
+        
+        # Datos del dispositivo
+        device_data = df_plot[df_plot['device'] == device]
+        alertas = device_data[(device_data['y_proba'] >= threshold) & 
+                              (device_data['date'] >= window_start) & 
+                              (device_data['date'] <= falla_date)]
+        
+        if len(alertas) > 0:
+            primera_alerta = alertas['date'].min()
+            dias_anticipacion = (falla_date - primera_alerta).days
+            anticipaciones.append(dias_anticipacion)
+            
+            # Barra horizontal para cada falla
+            ax.barh(i, dias_anticipacion, color=COLORS['success'], alpha=0.7, height=0.6)
+            ax.scatter([dias_anticipacion], [i], color=COLORS['danger'], s=100, 
+                      marker='X', zorder=5, label='Falla' if i == 0 else '')
+            ax.text(dias_anticipacion + 0.5, i, f'{device}', va='center', fontsize=9)
+    
+    ax.set_xlabel('Días de anticipación antes de la falla')
+    ax.set_ylabel('Fallas detectadas')
+    ax.set_title(f'Tiempo de Anticipación en Detecciones Exitosas\n'
+                f'Promedio: {np.mean(anticipaciones):.1f} días | '
+                f'Mínimo: {np.min(anticipaciones)} días | '
+                f'Máximo: {np.max(anticipaciones)} días')
+    ax.axvline(x=np.mean(anticipaciones), color=COLORS['primary'], linestyle='--', 
+               linewidth=2, label=f'Promedio ({np.mean(anticipaciones):.1f}d)')
+    ax.set_xlim(0, window_days + 2)
+    ax.legend()
+    ax.grid(True, alpha=0.3, axis='x')
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Estadísticas
+    print("\n" + "="*60)
+    print(" ESTADÍSTICAS DE ANTICIPACIÓN")
+    print("="*60)
+    print(f"  Fallas detectadas: {len(detectadas)}")
+    print(f"  Días de anticipación promedio: {np.mean(anticipaciones):.1f}")
+    print(f"  Días de anticipación mínimo: {np.min(anticipaciones)}")
+    print(f"  Días de anticipación máximo: {np.max(anticipaciones)}")
+    print(f"  Mediana: {np.median(anticipaciones):.1f} días")
+    print("="*60)
+    
+    plt.tight_layout()
+    plt.show()
+
+
+def print_results_final(
+    metrics: Dict[str, Any], 
+    config: Dict[str, Any] = None,
+    window_days: int = 30
+) -> None:
+    """Imprime resultados del modelo Final."""
+    if config is None:
+        config = MODEL_CONFIG
+    
+    print("=" * 60)
+    print(" RESULTADOS MODELO FINAL")
+    print("=" * 60)
+    print(f"\n  Threshold: {config['threshold']}")
+    print(f"  Ventana: {window_days} días")
+    print(f"\n  True Positives (fallas detectadas): {metrics['tp']}")
+    print(f"  False Positives (alertas falsas): {metrics['fp']}")
+    print(f"  False Negatives (fallas no detectadas): {metrics['fn']}")
+    print(f"\n  Precision: {metrics['precision']*100:.1f}%")
+    print(f"  Recall: {metrics['recall']*100:.1f}%")
+    print(f"  F1 Score: {metrics['f1']*100:.1f}%")
+    print(f"\n  BASELINE: ${metrics['baseline']:.1f}")
+    print(f"  COSTO MODELO: ${metrics['cost']:.1f}")
+    print(f"  AHORRO: {metrics['savings_pct']:+.1f}%")
+    print("=" * 60)
+
+
+def print_summary_final(
+    config: Dict[str, Any],
+    df_train: pd.DataFrame,
+    df_test: pd.DataFrame,
+    feature_cols: List[str],
+    metrics: Dict[str, Any],
+    window_days: int = 30
+) -> None:
+    """Imprime resumen ejecutivo del modelo Final."""
+    print("\n" + "=" * 70)
+    print(" RESUMEN MODELO FINAL - MANTENIMIENTO PREDICTIVO")
+    print("=" * 70)
+    
+    print(f"""
+CONFIGURACIÓN:
+  Modelo: {config['model_type']}
+  n_estimators: {config['n_estimators']}
+  Threshold: {config['threshold']}
+  Ventana de detección: {window_days} días
+
+DATASET:
+  Train: {len(df_train):,} registros ({df_train['failure'].sum()} fallas)
+  Test: {len(df_test):,} registros ({df_test['failure'].sum()} fallas)
+  Features: {len(feature_cols)}
+
+RESULTADOS:
+  True Positives: {metrics['tp']} fallas detectadas
+  False Positives: {metrics['fp']} alertas falsas
+  False Negatives: {metrics['fn']} fallas no detectadas
+
+  Precision: {metrics['precision']*100:.1f}%
+  Recall: {metrics['recall']*100:.1f}%
+  F1 Score: {metrics['f1']*100:.1f}%
+
+COSTOS:
+  Baseline (sin modelo): ${metrics['baseline']:.1f}
+  Costo con modelo: ${metrics['cost']:.1f}
+  AHORRO: {metrics['savings_pct']:+.1f}% {'✓' if metrics['savings_pct'] > 0 else ''}
+""")
+    
+    print("=" * 70)
+
+
+def save_model_final(
+    model, 
+    feature_cols: List[str], 
+    metrics: Dict[str, Any],
+    config: Dict[str, Any] = None,
+    filepath: str = 'modelo_final_final.pkl'
+) -> None:
+    """Guarda el modelo Final y sus artefactos."""
+    if config is None:
+        config = MODEL_CONFIG
+    
+    model_data = {
+        'model': model,
+        'feature_cols': feature_cols,
+        'threshold': config['threshold'],
+        'config': config,
+        'metrics': metrics
+    }
+    
+    joblib.dump(model_data, filepath)
+    print(f"Modelo guardado en: {filepath}")
+
+
+def plot_final_summary_final(
+    metrics: Dict[str, Any],
+    model_name: str = "Modelo Final",
+    window_days: int = 30
+) -> None:
+    """
+    Visualiza resumen final del modelo con métricas, costos y detección de fallas.
+    
+    Args:
+        metrics: Diccionario con métricas (precision, recall, f1, tp, fp, fn, baseline, cost, savings_pct)
+        model_name: Nombre del modelo para mostrar
+        window_days: Ventana de detección en días
+    """
+    fig = plt.figure(figsize=(16, 10))
+    
+    # Calcular valores
+    total_fallas = metrics['tp'] + metrics['fn']
+    ahorro = metrics['baseline'] - metrics['cost']
+    
+    # --- Panel 1: Métricas de Clasificación ---
+    ax1 = fig.add_subplot(2, 2, 1)
+    metricas_nombres = ['Precision', 'Recall', 'F1 Score']
+    valores = [metrics['precision']*100, metrics['recall']*100, metrics['f1']*100]
+    colores = [COLORS['primary'], COLORS['warning'], COLORS['success']]
+    
+    bars = ax1.bar(metricas_nombres, valores, color=colores, edgecolor='black', linewidth=1.5)
+    ax1.set_ylim(0, 110)
+    ax1.set_ylabel('Porcentaje (%)', fontsize=12)
+    ax1.set_title('MÉTRICAS DE CLASIFICACIÓN', fontsize=14, fontweight='bold', pad=15)
+    
+    for bar, val in zip(bars, valores):
+        height = bar.get_height()
+        ax1.text(bar.get_x() + bar.get_width()/2, height + 3, 
+                 f'{val:.1f}%', ha='center', fontsize=13, fontweight='bold')
+    
+    ax1.axhline(y=50, color='gray', linestyle='--', alpha=0.5, linewidth=1)
+    ax1.text(2.4, 52, 'Baseline 50%', fontsize=9, color='gray', va='bottom')
+    ax1.grid(True, alpha=0.3, axis='y')
+    ax1.set_axisbelow(True)
+    
+    # --- Panel 2: Comparación de Costos ---
+    ax2 = fig.add_subplot(2, 2, 2)
+    costos_nombres = ['Sin Modelo\n(Baseline)', f'Con {model_name}']
+    valores_costo = [metrics['baseline'], metrics['cost']]
+    colores_costo = [COLORS['danger'], COLORS['success']]
+    
+    bars2 = ax2.bar(costos_nombres, valores_costo, color=colores_costo, edgecolor='black', linewidth=1.5)
+    ax2.set_ylabel('Costo ($)', fontsize=12)
+    ax2.set_title('COMPARACIÓN DE COSTOS', fontsize=14, fontweight='bold', pad=15)
+    
+    max_costo = max(valores_costo) * 1.25
+    ax2.set_ylim(0, max_costo)
+    
+    for bar, val in zip(bars2, valores_costo):
+        ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + max_costo*0.02, 
+                 f'${val:.1f}', ha='center', fontsize=13, fontweight='bold')
+    
+    # Mostrar ahorro solo si es positivo
+    if ahorro > 0:
+        mid_y = (metrics['baseline'] + metrics['cost']) / 2
+        ax2.annotate('', xy=(1, metrics['cost'] + max_costo*0.02), 
+                     xytext=(0, metrics['baseline'] - max_costo*0.02),
+                     arrowprops=dict(arrowstyle='->', color=COLORS['success'], lw=2.5, 
+                                     connectionstyle='arc3,rad=0.2'))
+        ax2.text(0.5, mid_y, f'Ahorro\n${ahorro:.1f}\n({metrics["savings_pct"]:+.1f}%)',
+                ha='center', fontsize=11, fontweight='bold', color=COLORS['success'],
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='white', edgecolor=COLORS['success'], alpha=0.9))
+    elif ahorro == 0:
+        ax2.text(0.5, max_costo*0.5, 'Sin ahorro\n(igual costo)',
+                ha='center', fontsize=11, fontweight='bold', color=COLORS['dark'],
+                bbox=dict(boxstyle='round,pad=0.3', facecolor='lightyellow', edgecolor=COLORS['warning'], alpha=0.9))
+    
+    ax2.grid(True, alpha=0.3, axis='y')
+    ax2.set_axisbelow(True)
+    
+    # --- Panel 3: Detección de Fallas (Barras horizontales) ---
+    ax3 = fig.add_subplot(2, 2, 3)
+    
+    categorias = ['Fallas Detectadas (TP)', 'Fallas No Detectadas (FN)', 'Falsas Alarmas (FP)']
+    valores_det = [metrics['tp'], metrics['fn'], metrics['fp']]
+    colores_det = [COLORS['success'], COLORS['danger'], COLORS['warning']]
+    
+    y_pos = np.arange(len(categorias))
+    bars3 = ax3.barh(y_pos, valores_det, color=colores_det, edgecolor='black', linewidth=1.5, height=0.6)
+    
+    ax3.set_yticks(y_pos)
+    ax3.set_yticklabels(categorias, fontsize=11)
+    ax3.set_xlabel('Cantidad', fontsize=12)
+    ax3.set_title('DETECCIÓN DE FALLAS', fontsize=14, fontweight='bold', pad=15)
+    ax3.invert_yaxis()
+    
+    # Valores en las barras
+    for bar, val in zip(bars3, valores_det):
+        width = bar.get_width()
+        ax3.text(width + 0.3, bar.get_y() + bar.get_height()/2, 
+                 str(int(val)), ha='left', va='center', fontsize=13, fontweight='bold')
+    
+    # Agregar info de total
+    ax3.text(0.98, 0.02, f'Total fallas reales: {total_fallas}', 
+             transform=ax3.transAxes, ha='right', va='bottom',
+             fontsize=10, style='italic', color=COLORS['dark'])
+    
+    ax3.grid(True, alpha=0.3, axis='x')
+    ax3.set_axisbelow(True)
+    max_val = max(valores_det) * 1.3 if max(valores_det) > 0 else 5
+    ax3.set_xlim(0, max_val)
+    
+    # --- Panel 4: Resumen Ejecutivo ---
+    ax4 = fig.add_subplot(2, 2, 4)
+    ax4.axis('off')
+    
+    # Construir resumen
+    recall_pct = metrics['recall'] * 100
+    precision_pct = metrics['precision'] * 100
+    f1_pct = metrics['f1'] * 100
+    
+    # Determinar estado del modelo
+    if recall_pct >= 50:
+        estado = "ACEPTABLE"
+        estado_color = COLORS['success']
+    elif recall_pct >= 20:
+        estado = "MEJORABLE"
+        estado_color = COLORS['warning']
+    else:
+        estado = "INSUFICIENTE"
+        estado_color = COLORS['danger']
+    
+    # Crear texto con formato limpio
+    resumen_lineas = [
+        f"{'─' * 50}",
+        f"  RESUMEN EJECUTIVO - {model_name.upper()}",
+        f"{'─' * 50}",
+        "",
+        f"  MÉTRICAS:",
+        f"    Precision:     {precision_pct:6.1f}%",
+        f"    Recall:        {recall_pct:6.1f}%",
+        f"    F1 Score:      {f1_pct:6.1f}%",
+        "",
+        f"  DETECCIÓN (ventana {window_days}d):",
+        f"    Detectadas:    {metrics['tp']:3d} / {total_fallas}",
+        f"    No detectadas: {metrics['fn']:3d}",
+        f"    Falsas alarmas:{metrics['fp']:3d}",
+        "",
+        f"  COSTOS:",
+        f"    Sin modelo:   ${metrics['baseline']:6.1f}",
+        f"    Con modelo:   ${metrics['cost']:6.1f}",
+        f"    Ahorro:       ${ahorro:6.1f} ({metrics['savings_pct']:+.1f}%)",
+        "",
+        f"{'─' * 50}",
+        f"  ESTADO: {estado}",
+        f"{'─' * 50}",
+    ]
+    
+    resumen_texto = '\n'.join(resumen_lineas)
+    
+    # Crear recuadro con el resumen
+    props = dict(boxstyle='round,pad=0.8', facecolor='white', 
+                 edgecolor=estado_color, linewidth=3)
+    
+    ax4.text(0.5, 0.5, resumen_texto, transform=ax4.transAxes, fontsize=11,
+             verticalalignment='center', horizontalalignment='center',
+             fontfamily='monospace', bbox=props)
+    
+    # Título general
+    plt.suptitle(f'{model_name.upper()} - MANTENIMIENTO PREDICTIVO\nResultados Finales (Ventana {window_days} días)', 
+                 fontsize=16, fontweight='bold', y=1.02)
+    
+    plt.tight_layout()
+    plt.show()
+    
+    # Imprimir conclusión en texto
+    print("\n" + "=" * 70)
+    print(" CONCLUSIÓN")
+    print("=" * 70)
+    print(f"""
+  El {model_name} detecta {metrics['tp']} de {total_fallas} fallas ({recall_pct:.1f}% recall)
+  con una precisión del {precision_pct:.1f}%.
+  
+  IMPACTO ECONÓMICO:
+    Sin modelo: ${metrics['baseline']:.1f} (todas las fallas cuestan)
+    Con modelo: ${metrics['cost']:.1f}
+    
+  ══════════════════════════════════════════════════════════════════════
+   AHORRO TOTAL: ${ahorro:.1f} ({metrics['savings_pct']:+.1f}%)
+  ══════════════════════════════════════════════════════════════════════
+""")
+    print("=" * 70)
