@@ -133,10 +133,6 @@ challenge/
 - Optimización de hiperparámetros con Optuna (TPE Sampler)
 - Análisis de threshold para optimizar costo operativo
 
-**Resultados:**
-- Recall: 73.9% (detecta 17 de 23 fallas en test)
-- Con threshold óptimo: Ahorro del 95.7% vs baseline
-
 **Funcionalidades del módulo `utils_classifier.py`:**
 - Carga y preprocesamiento de datos de telemetría
 - Feature engineering temporal y rolling statistics
